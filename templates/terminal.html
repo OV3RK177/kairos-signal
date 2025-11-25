@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>KAIROS TERMINAL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root { --bg: #0c0c0c; --panel: #111; --border: #222; --text: #aaa; --high: #fff; --accent: #0066ff; --pos: #00cc66; --neg: #ff3333; }
+        body { background: var(--bg); color: var(--text); font-family: 'Consolas', 'Monaco', monospace; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        
+        /* Utility */
+        .panel { background: var(--panel); border: 1px solid var(--border); display: flex; flex-direction: column; }
+        .text-pos { color: var(--pos); } .text-neg { color: var(--neg); } .text-high { color: var(--high); }
+        
+        /* Header */
+        .header { height: 40px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; justify-content: space-between; background: #080808; }
+        
+        /* Main Layout */
+        .workspace { flex: 1; display: grid; grid-template-columns: 3fr 1fr; gap: 8px; padding: 8px; overflow: hidden; }
+        .left-col { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+        .right-col { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+        
+        /* Table */
+        .table-container { overflow-y: auto; flex: 1; border-top: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { text-align: left; padding: 8px; background: #151515; position: sticky; top: 0; color: #666; font-weight: bold; border-bottom: 1px solid var(--border); }
+        td { padding: 6px 8px; border-bottom: 1px solid #1a1a1a; cursor: pointer; }
+        tr:hover { background: #1a1a1a; color: var(--high); }
+        tr.active { background: #1e2530; border-left: 3px solid var(--accent); }
+        
+        /* AI Chat */
+        .chat-box { flex: 1; overflow-y: auto; padding: 8px; font-size: 11px; line-height: 1.5; }
+        .chat-input { background: #000; border: 1px solid var(--border); color: var(--high); padding: 8px; width: 100%; outline: none; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="flex items-center gap-4">
+            <span class="text-high font-bold tracking-widest">KAIROS<span class="text-blue-600">TERMINAL</span></span>
+            <div id="ticker" class="flex gap-4 text-xs font-mono text-gray-500">Loading Market Data...</div>
+        </div>
+        <div class="flex gap-4 text-xs">
+            <span id="infra-status">Scanning Nodes...</span>
+            <span class="text-pos font-bold">● ONLINE</span>
+        </div>
+    </div>
+
+    <div class="workspace">
+        
+        <div class="left-col">
+            <div class="panel h-1/3 p-2 relative">
+                <div class="absolute top-2 left-2 text-[10px] font-bold text-gray-500">ALPHA CORRELATION (48H)</div>
+                <div class="absolute top-2 right-2 flex gap-2 text-[10px]" id="chart-legend"></div>
+                <canvas id="mainChart"></canvas>
+            </div>
+            
+            <div class="panel flex-1">
+                <div class="flex justify-between p-2 text-xs bg-[#080808]">
+                    <span class="font-bold text-gray-500">MARKET SCANNER</span>
+                    <span class="text-blue-600" id="count">0 ASSETS</span>
+                </div>
+                <div class="table-container" id="table-scroll">
+                    <table id="asset-table">
+                        <thead>
+                            <tr>
+                                <th class="w-24">TICKER</th>
+                                <th class="text-right">PRICE</th>
+                                <th class="text-right">24H %</th>
+                                <th class="text-right">VOLUME</th>
+                                <th class="text-center">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                    <div id="loader" class="p-4 text-center text-xs text-gray-600 hidden">LOADING MORE...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-col">
+            <div class="panel flex-1">
+                <div class="p-2 border-b border-[#222] text-xs font-bold text-blue-600">INTELLIGENCE</div>
+                <div id="chat-history" class="chat-box">
+                    <div class="text-gray-500 mb-2">System initialized.</div>
+                </div>
+                <div class="p-2 bg-[#080808]">
+                    <input id="ai-input" class="chat-input" placeholder="Ask command...">
+                </div>
+            </div>
+            
+            <div class="panel h-1/3 p-2 overflow-y-auto">
+                <div class="text-[10px] font-bold text-gray-500 mb-2">INFRASTRUCTURE HEALTH</div>
+                <div id="infra-list" class="space-y-2"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // STATE
+        let page = 1;
+        let isLoading = false;
+        let selected = new Set(['NVDA', 'BTC']); // Default
+        
+        // CHART INIT
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        let chart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: [] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                elements: { point: { radius: 0 }, line: { borderWidth: 2 } },
+                scales: { x: { display: false }, y: { grid: { color: '#1a1a1a' }, ticks: { color: '#444' } } },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // 1. LOAD TABLE (Infinite Scroll)
+        async function loadTable() {
+            if(isLoading) return; isLoading=true;
+            document.getElementById('loader').classList.remove('hidden');
+            
+            try {
+                const res = await fetch(`/api/table?page=${page}`);
+                const data = await res.json();
+                
+                if(data.length > 0) {
+                    data.forEach(r => {
+                        const tr = document.createElement('tr');
+                        const c = r.change >= 0 ? 'text-pos' : 'text-neg';
+                        const active = selected.has(r.ticker) ? 'active' : '';
+                        tr.className = active;
+                        tr.onclick = () => toggle(r.ticker);
+                        
+                        tr.innerHTML = `
+                            <td class="text-high font-bold">${r.ticker}</td>
+                            <td class="text-right text-gray-400 font-mono">$${r.price.toLocaleString()}</td>
+                            <td class="text-right ${c} font-mono">${r.change.toFixed(2)}%</td>
+                            <td class="text-right text-gray-500 font-mono">${(r.volume/1000000).toFixed(1)}M</td>
+                            <td class="text-center text-[10px] text-blue-600">VIEW</td>
+                        `;
+                        document.getElementById('table-body').appendChild(tr);
+                    });
+                    page++;
+                    document.getElementById('count').innerText = document.getElementById('table-body').children.length + " LOADED";
+                }
+            } catch(e) {}
+            isLoading=false; document.getElementById('loader').classList.add('hidden');
+        }
+
+        document.getElementById('table-scroll').addEventListener('scroll', (e) => {
+            if(e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 50) loadTable();
+        });
+
+        // 2. CHARTING
+        function toggle(id) {
+            if(selected.has(id)) selected.delete(id);
+            else { if(selected.size>=3) return; selected.add(id); }
+            updateChart();
+            // Re-render table rows to show active state would be expensive, simple CSS toggle logic here if needed
+        }
+
+        async function updateChart() {
+            if(selected.size===0) return;
+            const res = await fetch(`/api/chart?ids=${Array.from(selected).join(',')}`);
+            const data = await res.json();
+            
+            chart.data = {
+                labels: Object.values(data)[0]?.labels || [],
+                datasets: Object.entries(data).map(([label, d]) => ({
+                    label: label, data: d.data, borderColor: d.color, borderWidth: 2
+                }))
+            };
+            chart.update();
+            
+            document.getElementById('chart-legend').innerHTML = Object.entries(data).map(([l,d]) => 
+                `<span style="color:${d.color}">● ${l}</span>`
+            ).join(' ');
+        }
+
+        // 3. HUD & INFRA
+        async function updateHUD() {
+            try {
+                const res = await fetch('/api/stats');
+                const d = await res.json();
+                
+                // Ticker
+                document.getElementById('ticker').innerHTML = Object.entries(d.macro||{}).map(([k,v])=>`${k}: <span class="text-high">$${v.toFixed(2)}</span>`).join('   ');
+                
+                // Infra List
+                document.getElementById('infra-list').innerHTML = Object.entries(d.infra||{}).map(([k,v])=>`
+                    <div class="flex justify-between items-center border-b border-[#222] pb-1">
+                        <span class="text-[10px] text-gray-500 font-bold">${k}</span>
+                        <span class="text-high font-mono text-xs">${parseInt(v).toLocaleString()}</span>
+                    </div>
+                `).join('');
+                
+                document.getElementById('infra-status').innerText = Object.keys(d.infra||{}).length + " NETWORKS ACTIVE";
+            } catch(e) {}
+        }
+
+        // 4. AI
+        document.getElementById('ai-input').addEventListener('keypress', async (e) => {
+            if(e.key === 'Enter') {
+                const q = e.target.value; e.target.value = '';
+                const box = document.getElementById('chat-history');
+                box.innerHTML += `<div class="text-blue-500 mt-2 mb-1">> ${q}</div>`;
+                
+                const res = await fetch('/api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q, context:`Viewing ${Array.from(selected)}`})});
+                const d = await res.json();
+                box.innerHTML += `<div class="text-gray-300 mb-2">${marked.parse(d.response)}</div>`;
+                box.scrollTop = box.scrollHeight;
+            }
+        });
+
+        // INIT
+        loadTable();
+        updateChart();
+        updateHUD();
+        setInterval(updateHUD, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Secrets
+.env
+.env.*
+
+# System / Venv
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Logs
+*.log
+logs/
