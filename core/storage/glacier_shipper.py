@@ -4,21 +4,22 @@ import glob
 import time
 import sys
 from dotenv import load_dotenv
-from botocore.exceptions import NoCredentialsError
 
 load_dotenv()
-LOCAL_VAULT_PATH = os.getenv("KAIROS_STORAGE_PATH", "/mnt/volume_nyc3_01/kairos_data")
+
+# CONFIG: Scan the ENTIRE volume root
+ROOT_VAULT = "/mnt/volume_nyc3_01"
 BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
+# Deep Archive = -bash.99/TB/Month (Cheapest)
 STORAGE_CLASS = "DEEP_ARCHIVE"
 
 def upload_to_glacier():
     if not BUCKET_NAME:
-        print("❌ ERROR: AWS_BUCKET_NAME not found in .env")
+        print("❌ ERROR: AWS_BUCKET_NAME missing.")
         sys.exit(1)
 
     print(f"❄️  GLACIER SHIPPER ONLINE.")
-    print(f"📂 Scanning: {LOCAL_VAULT_PATH}")
-    print(f"☁️  Target: s3://{BUCKET_NAME}")
+    print(f"📂 Target Root: {ROOT_VAULT}")
     
     try:
         s3 = boto3.client(
@@ -28,27 +29,47 @@ def upload_to_glacier():
             region_name=os.getenv("AWS_DEFAULT_REGION")
         )
     except Exception as e:
-        print(f"❌ AWS Init Failed: {e}")
+        print(f"❌ AWS Connect Error: {e}")
         return
 
     while True:
-        files = glob.glob(f"{LOCAL_VAULT_PATH}/*.parquet")
+        # RECURSIVE SCAN: Finds .parquet in ALL subfolders (Legacy + Live)
+        files = glob.glob(f"{ROOT_VAULT}/**/*.parquet", recursive=True)
+        
         if not files:
+            print("zzz... Vault clean. Sleeping 60s.")
             time.sleep(60)
             continue
             
         print(f"📦 Found {len(files)} files to ship.")
+        
         for local_file in files:
-            filename = os.path.basename(local_file)
-            s3_key = f"raw_ingest/{filename}"
             try:
-                s3.upload_file(local_file, BUCKET_NAME, s3_key, ExtraArgs={'StorageClass': STORAGE_CLASS})
-                print(f"✅ Archived: {filename}")
+                # Create a clean S3 key (folder structure)
+                # e.g. kairos_legacy_processed/table_part_0.parquet
+                relative_path = os.path.relpath(local_file, ROOT_VAULT)
+                s3_key = f"raw_ingest/{relative_path}"
+                
+                print(f"🚀 Uploading: {relative_path}...")
+                
+                s3.upload_file(
+                    local_file, 
+                    BUCKET_NAME, 
+                    s3_key, 
+                    ExtraArgs={'StorageClass': STORAGE_CLASS}
+                )
+                
+                print(f"✅ Archived: {s3_key}")
+                
+                # DELETE LOCAL (The Purge)
                 os.remove(local_file)
+                
             except Exception as e:
                 print(f"⚠️ Upload Failed: {e}")
                 time.sleep(5)
-        time.sleep(10)
+
+        # Breathe between batches
+        time.sleep(5)
 
 if __name__ == "__main__":
     upload_to_glacier()
