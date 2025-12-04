@@ -18,24 +18,17 @@ app.add_middleware(
 
 VAULT_PATH = os.getenv("KAIROS_STORAGE_PATH", "/mnt/volume_nyc3_01/kairos_data")
 ANALYTICS_PATH = "/mnt/volume_nyc3_01/kairos_analytics/kairos_3000_matrix.csv"
-
-@app.get("/")
-def root(): return {"status": "ONLINE", "port": 8088}
+BRIEFING_PATH = "/mnt/volume_nyc3_01/kairos_analytics/daily_briefing.md"
+DEEP_PATH = "/mnt/volume_nyc3_01/kairos_analytics/deep_correlations.json"
+LEDGER_PATH = "/mnt/volume_nyc3_01/kairos_analytics/ledger.json"
 
 @app.get("/stats")
 def stats():
     try:
         files = glob.glob(f"{VAULT_PATH}/*.parquet")
         count = len(files)
-        # Estimate based on 100-row batch size (testing) or 50k (prod)
-        # We multiply by 1000 for a realistic "Points" metric for the UI
-        return {
-            "vault_path": VAULT_PATH,
-            "shard_count": count,
-            "estimated_data_points": count * 1000, 
-            "status": "ingesting"
-        }
-    except: return {"shard_count": 0, "estimated_data_points": 0, "status": "error"}
+        return {"estimated_data_points": count * 1000, "shard_count": count, "status": "ingesting"}
+    except: return {"status": "error"}
 
 @app.get("/logs")
 def logs():
@@ -43,30 +36,37 @@ def logs():
         if os.path.exists("conductor.log"):
             res = subprocess.check_output("tail -n 50 conductor.log", shell=True).decode()
             return {"live_feed": [l for l in res.split('\n') if l.strip()]}
-        return {"live_feed": ["Waiting for logs..."]}
+        return {"live_feed": []}
     except: return {"live_feed": []}
 
 @app.get("/alpha")
 def alpha():
     try:
-        if not os.path.exists(ANALYTICS_PATH):
-            return {"error": "Matrix file not found"}
-            
-        df = pd.read_csv(ANALYTICS_PATH)
-        
-        # FIX: Rename columns to match Frontend expectation
-        # The generator produced 'Volatility_Std', UI wants 'Volatility_Risk'
-        if 'Volatility_Std' in df.columns:
-            df = df.rename(columns={'Volatility_Std': 'Volatility_Risk'})
-            
-        # Sort by Risk
-        top = df.sort_values(by='Volatility_Risk', ascending=False).head(50)
-        
-        # Handle NaNs for JSON compatibility
-        data = top.fillna(0).to_dict(orient='records')
-        return {"data": data}
-    except Exception as e:
-        return {"error": str(e)}
+        if os.path.exists(ANALYTICS_PATH):
+            df = pd.read_csv(ANALYTICS_PATH)
+            if 'Volatility_Std' in df.columns: df = df.rename(columns={'Volatility_Std': 'Volatility_Risk'})
+            top = df.sort_values(by='Volatility_Risk', ascending=False).head(50)
+            return {"data": top.fillna(0).to_dict(orient='records')}
+        return {"data": []}
+    except: return {"data": []}
+
+@app.get("/briefing")
+def briefing():
+    try:
+        if os.path.exists(LEDGER_PATH):
+            with open(LEDGER_PATH, "r") as f:
+                return {"history": json.load(f)}
+        return {"history": []}
+    except: return {"history": []}
+
+@app.get("/deep-alpha")
+def deep_alpha():
+    try:
+        if os.path.exists(DEEP_PATH):
+            with open(DEEP_PATH, "r") as f:
+                return json.load(f)
+        return {"factors": []}
+    except: return {"factors": []}
 
 if __name__ == "__main__":
     import uvicorn

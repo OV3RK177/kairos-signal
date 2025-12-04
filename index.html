@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>KAIROS SIGNAL | LEDGER</title>
+    <style>
+        :root { --bg: #050505; --panel: #0a0a0a; --border: #333; --text: #ccc; --green: #00ff41; --red: #ff5555; --blue: #4da6ff; --yellow: #f1fa8c; }
+        body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; margin: 0; padding: 20px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* HEADER */
+        .header { border-bottom: 1px solid var(--green); padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
+        h1 { margin: 0; color: #fff; text-shadow: 0 0 10px var(--green); }
+        
+        /* LAYOUT */
+        .main { display: flex; gap: 20px; flex-grow: 1; overflow: hidden; }
+        
+        /* LEFT: METRICS & LOGS */
+        .left-col { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .card { background: var(--panel); border: 1px solid var(--border); padding: 15px; }
+        .val { font-size: 24px; font-weight: bold; color: #fff; }
+        .log-window { flex-grow: 1; background: #000; border: 1px solid var(--border); padding: 10px; overflow-y: auto; font-size: 10px; }
+        .log-entry { border-bottom: 1px solid #111; padding: 2px 0; }
+        
+        /* RIGHT: INTELLIGENCE LEDGER (THE DOC) */
+        .ledger-col { flex: 1.2; background: var(--panel); border: 1px solid var(--border); display: flex; flex-direction: column; }
+        .ledger-head { padding: 10px; background: #111; border-bottom: 1px solid var(--border); font-weight: bold; color: var(--yellow); }
+        .ledger-body { padding: 20px; overflow-y: auto; flex-grow: 1; scrollbar-width: thin; }
+        
+        /* REPORT CARD STYLE */
+        .report { border-left: 3px solid var(--green); background: rgba(0,255,65,0.02); padding: 15px; margin-bottom: 20px; }
+        .report-ts { font-size: 10px; color: #666; margin-bottom: 5px; }
+        .report-head { font-size: 16px; font-weight: bold; color: #fff; margin-bottom: 10px; }
+        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; margin-bottom: 10px; }
+        .report-item span { color: #888; display: block; font-size: 9px; }
+        .red-team { border: 1px solid var(--red); padding: 10px; color: #ffaaaa; font-size: 11px; margin-top: 10px; background: rgba(255, 85, 85, 0.05); }
+        .meta { font-size: 9px; color: #444; margin-top: 10px; border-top: 1px solid #222; padding-top: 5px; }
+        
+        .c-slot { color: var(--yellow); } .c-trade { color: var(--blue); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>KAIROS SIGNAL</h1>
+    <div id="status" style="color: var(--green);">SYSTEM ONLINE</div>
+</div>
+
+<div class="main">
+    <div class="left-col">
+        <div class="grid">
+            <div class="card">
+                <div style="font-size:10px; color:#666">POINTS</div>
+                <div class="val" id="total">---</div>
+            </div>
+            <div class="card">
+                <div style="font-size:10px; color:#666">SHARDS</div>
+                <div class="val" id="shards">---</div>
+            </div>
+        </div>
+        <div class="log-window" id="logs"></div>
+    </div>
+
+    <div class="ledger-col">
+        <div class="ledger-head">INTELLIGENCE LEDGER [AUTO-GENERATED HOURLY]</div>
+        <div class="ledger-body" id="ledger">
+            <div style="text-align:center; padding:20px; color:#444;">WAITING FOR ANALYST CYCLE...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = "http://localhost:8088";
+
+    async function tick() {
+        try {
+            // 1. STATS & LOGS
+            const s = await (await fetch(`${API}/stats`)).json();
+            document.getElementById('total').innerText = parseInt(s.estimated_data_points).toLocaleString();
+            document.getElementById('shards').innerText = parseInt(s.shard_count).toLocaleString();
+            
+            const l = await (await fetch(`${API}/logs`)).json();
+            if(l.live_feed) {
+                const c = document.getElementById('logs');
+                l.live_feed.reverse().forEach(msg => {
+                   if(c.innerHTML.indexOf(msg) === -1) {
+                       const div = document.createElement('div');
+                       div.className = 'log-entry';
+                       let color = '#fff';
+                       if(msg.includes('SLOT')) color = '#f1fa8c';
+                       if(msg.includes('TRADE')) color = '#4da6ff';
+                       div.innerHTML = `<span style="color:#444">[${new Date().toLocaleTimeString()}]</span> <span style="color:${color}">${msg}</span>`;
+                       c.prepend(div);
+                       if(c.children.length > 50) c.lastChild.remove();
+                   }
+                });
+            }
+
+            // 2. BRIEFINGS (THE DOC)
+            const b = await (await fetch(`${API}/briefing`)).json();
+            if(b.history && b.history.length > 0) {
+                const container = document.getElementById('ledger');
+                // Only re-render if count changed to avoid flicker
+                if(container.childElementCount !== b.history.length) {
+                    container.innerHTML = b.history.map(r => `
+                        <div class="report">
+                            <div class="report-ts">${r.timestamp} | ID: ${r.id}</div>
+                            <div class="report-head">${r.report.headline}</div>
+                            
+                            <div class="report-grid">
+                                <div class="report-item"><span>ANOMALY</span>${r.report.anomaly}</div>
+                                <div class="report-item"><span>ACTION</span><b style="color:var(--green)">${r.report.trade}</b> (${r.report.confidence}%)</div>
+                            </div>
+                            
+                            <div style="font-size:11px; margin-bottom:5px; color:#ddd;">
+                                <b>Logic:</b> ${r.report.logic}
+                            </div>
+                            
+                            <div class="red-team">
+                                <b>🚩 RED TEAM COUNTER-THESIS:</b><br/>
+                                ${r.report.red_team}
+                            </div>
+                            
+                            <div class="meta">TRANSFORMATION: ${r.methodology}</div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+        } catch(e) {
+            document.getElementById('status').innerText = "DISCONNECTED";
+            document.getElementById('status').style.color = "red";
+        }
+    }
+
+    setInterval(tick, 2000);
+</script>
+</body>
+</html>

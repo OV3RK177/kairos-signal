@@ -1,0 +1,22 @@
+### Anomalies & Trends: DePIN & AI Compute Relevance
+
+**1. Crypto-Equity Divergence Anomaly**
+- **COIN +5.19%** vs **AI giants negative** (NVDA -1.03%, MSFT -2.5%) signals potential capital rotation from centralized AI infrastructure to decentralized/crypto exposure. This is bullish for DePIN tokens, which often trade as high-beta crypto assets.
+
+**2. AI Compute Demand Concern**
+- NVDA and MSFT weakness on a flat market day suggests investor skepticism about near-term AI capex sustainability or margin compression fears. This could create headwinds for DePIN compute projects pitching themselves as "cheaper alternatives" if overall demand softens.
+
+**3. Tesla's AI Narrative Decoupling**
+- **TSLA +4.08%** outperforming while other AI stocks lag indicates company-specific catalysts (likely robotaxi/FSD optimism). Highlights that AI compute demand isn't monolithic—vertical-specific applications (autonomous systems) may remain resilient even if enterprise cloud AI faces scrutiny.
+
+---
+
+### Risk Score: **6/10**
+
+**Rationale:** Crypto strength provides a favorable funding environment, but weakness in core AI infrastructure bellwethers (NVDA/MSFT) introduces demand uncertainty. The divergence creates a *"bullish sentiment, bearish fundamentals"* tension that elevates volatility risk for DePIN compute assets.
+
+---
+
+### Strategic Summary
+
+**Cautious Optimism with Selective Positioning.** The COIN/AI-stock split suggests traders are pricing in a decentralized alternative narrative, but NVDA/MSFT declines warn of potential demand slowdown. **Action**: Use crypto strength to take partial profits on high-beta DePIN tokens; rotate toward projects with **proven utilization metrics** (live GPU networks, not just roadmaps). Avoid overexposure to "AI compute" until NVDA stabilizes—focus on DePIN verticals with non-AI demand drivers (storage, wireless) as hedges. Monitor TSLA's AI momentum for clues on autonomous/edge compute demand resilience.
