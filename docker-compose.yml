@@ -38,7 +38,7 @@ services:
       - "9000:9000"
     volumes:
       - /mnt/volume_nyc3_01/clickhouse_data:/var/lib/clickhouse
-      # THE BREACHING CHARGE:
+      # THE HAMMER: Force mount the password reset
       - ./reset_password.xml:/etc/clickhouse-server/users.d/reset_password.xml
 
   postgres:

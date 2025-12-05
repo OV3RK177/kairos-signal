@@ -18,14 +18,16 @@ class KeyManager:
         self.log = logging.getLogger("Kairos.Keys")
         self.key_rings = {}
         
-        # DEFINITION: Map Service Name -> Env Var Name
+        # MAP: Service -> Env Var
         sources = {
             "helius": "HELIUS_API_KEY",
             "birdeye": "BIRDEYE_API_KEY",
             "polygon": "MASSIVE_API_KEY",
             "grass": "GRASS_AUTH_TOKEN",
             "dune": "DUNE_API_KEY",
-            "the_graph": "THE_GRAPH_KEY"
+            "flightaware": "FLIGHTAWARE_KEY",
+            "purpleair": "PURPLEAIR_API_KEY",
+            "dimo": "DIMO_API_KEY"
         }
 
         for service, env_var in sources.items():
@@ -43,11 +45,8 @@ class KeyManager:
             self.key_rings[service] = cycle(keys)
 
     def get_next(self, service):
-        """Returns the next key in the rotation."""
         ring = self.key_rings.get(service)
-        if not ring:
-            return None
+        if not ring: return None
         return next(ring)
 
-# Global Instance
 key_manager = KeyManager()

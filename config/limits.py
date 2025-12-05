@@ -1,22 +1,33 @@
-# KAIROS SWARM LIMITS
-# Define the heartbeat interval (in seconds) for each source
+# KAIROS SWARM LIMITS (V27)
+# Derived from User Research & Official Docs
 
 RATE_LIMITS = {
-    # High Speed (RPCs)
-    "helius": 0.1,       # 10 req/s (Free Tier)
-    "iotex": 0.2,        # 5 req/s (Public)
+    # --- HIGH VELOCITY (Public/Blockchain) ---
+    # Helium Blockchain API: 10 req/sec
+    "helium_public": 0.1,  
     
-    # Mid Speed (APIs)
-    "birdeye": 1.0,      # 1 req/s (Public limit)
-    "grass": 5.0,        # 1 req/5s (WAF safety)
+    # DePINscan: 100 req/min
+    "depinscan": 0.6,
     
-    # Low Speed (Analytical)
+    # --- MEDIUM VELOCITY (App APIs) ---
+    # WeatherXM: 100 req/min
+    "weatherxm": 0.6,
+    
+    # Nodle: 100 req/min
+    "nodle": 0.6,
+    
+    # --- LOW VELOCITY (Commercial/Strict) ---
+    # DIMO: 1000 req/hour
+    "dimo": 3.6,
+    
+    # Hivemapper: 10,000 req/day
+    "hivemapper": 8.6,
+    
+    # --- FINANCIAL ---
+    "birdeye": 1.0,      # 1 req/s
     "dune": 4.0,         # 15 req/min
-    "the_graph": 30.0,   # 2 req/min
-    
-    # UNLEASHED (Paid Plan)
-    "polygon": 0.01      # 100 req/s (effectively unlimited)
+    "polygon": 0.01      # Unlimited (Paid)
 }
 
-# Set global limit pointer
+# Global Pointer
 CURRENT_POLYGON_LIMIT = RATE_LIMITS["polygon"]

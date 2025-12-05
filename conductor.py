@@ -2,6 +2,10 @@ import subprocess
 import os
 import sys
 import time
+from dotenv import load_dotenv
+
+# FORCE LOAD ENV
+load_dotenv()
 
 def find_collectors():
     collectors = []
@@ -19,15 +23,18 @@ def ignite_swarm():
 
     print(f"🔥 IGNITING SWARM: {len(scripts)} Units detected.")
     
+    # Pass current environment to children
+    env = os.environ.copy()
+    
     processes = []
     try:
         for script in scripts:
-            print(f"🚀 Launching {script}...")
-            p = subprocess.Popen([sys.executable, script])
+            # print(f"🚀 Launching {script}...")
+            p = subprocess.Popen([sys.executable, script], env=env)
             processes.append(p)
-            time.sleep(0.2) # Fast launch
+            time.sleep(0.1)
             
-        print(f"✅ SWARM ACTIVE ({len(processes)} Threads). Press Ctrl+C to kill all.")
+        print(f"✅ SWARM ACTIVE ({len(processes)} Threads).")
         
         while True:
             time.sleep(1)
