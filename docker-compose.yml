@@ -3,6 +3,7 @@ services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     container_name: kairos_redpanda
+    restart: always
     command:
       - redpanda start
       - --smp 1
@@ -11,19 +12,46 @@ services:
       - --overprovisioned
       - --node-id 0
       - --check=false
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          memory: 512M
     ports:
       - "9092:9092"
       - "9644:9644"
     volumes:
-      - redpanda_data:/var/lib/redpanda/data
+      - /mnt/volume_nyc3_01/redpanda_data:/var/lib/redpanda/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    container_name: clickhouse-server
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - /mnt/volume_nyc3_01/clickhouse_data:/var/lib/clickhouse
+      # THE BREACHING CHARGE:
+      - ./reset_password.xml:/etc/clickhouse-server/users.d/reset_password.xml
 
   postgres:
     image: postgres:15
     container_name: kairos_db
+    restart: on-failure
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASS:-kairos}
-      POSTGRES_DB: kairos_meta
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     ports:
       - "5432:5432"
     volumes:
@@ -32,9 +60,12 @@ services:
   redis:
     image: redis:alpine
     container_name: kairos_redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     ports:
       - "6379:6379"
 
 volumes:
-  redpanda_data:
   postgres_data:

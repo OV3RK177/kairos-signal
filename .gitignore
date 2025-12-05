@@ -1,9 +1,5 @@
 .env
 venv/
 __pycache__/
-*.pyc
+*.jsonl
 *.log
-*.parquet
-.DS_Store
-data/
-core/storage/parquet_writer.py.save
