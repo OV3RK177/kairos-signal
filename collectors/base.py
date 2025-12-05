@@ -1,39 +1,46 @@
-from abc import ABC, abstractmethod
-from datetime import datetime
-import json
-try:
-    from kafka import KafkaProducer
-except:
-    KafkaProducer = None
+import os
+import logging
+import clickhouse_connect
+from dotenv import load_dotenv
 
-class KairosCollector(ABC):
-    def __init__(self, name):
-        self.name = name
+load_dotenv()
+
+# SHARED CONFIG
+DB_HOST = 'localhost'
+DB_PORT = 8123
+DB_USER = 'default'
+DB_PASS = 'kairos'
+
+class BaseCollector:
+    def __init__(self, slug):
+        self.slug = slug
+        self.log = logging.getLogger(f"Kairos.{slug}")
+        self.log.setLevel(logging.INFO)
+        self.client = self._connect_db()
+
+    def _connect_db(self):
         try:
-            self.producer = KafkaProducer(
-                bootstrap_servers=['localhost:9092'],
-                value_serializer=lambda x: json.dumps(x).encode('utf-8')
+            client = clickhouse_connect.get_client(
+                host=DB_HOST, port=DB_PORT, username=DB_USER, password=DB_PASS
             )
-        except:
-            self.producer = None
+            return client
+        except Exception as e:
+            self.log.critical(f"DB Connection Failed: {e}")
+            raise
 
-    def send_data(self, metric_name, value, meta=None):
-        payload = {
-            "ts": datetime.utcnow().isoformat(),
-            "source": self.name,
-            "metric": metric_name,
-            "value": value,
-            "meta": meta or {}
-        }
-        if self.producer:
-            try:
-                self.producer.send('kairos_firehose', value=payload)
-            except:
-                pass
-        else:
-            # Fallback log if Redpanda isn't up
-            pass
-        
-    @abstractmethod
-    def collect(self):
-        pass
+    def insert_batch(self, batch):
+        """
+        Expects batch to be a list of lists:
+        [[timestamp, project_slug, metric_name, value], ...]
+        """
+        if not batch:
+            return
+        try:
+            self.client.insert(
+                'metrics', 
+                batch, 
+                column_names=['timestamp', 'project_slug', 'metric_name', 'metric_value']
+            )
+            self.log.info(f"Injected {len(batch)} records.")
+        except Exception as e:
+            self.log.error(f"Insert Failed: {e}")
