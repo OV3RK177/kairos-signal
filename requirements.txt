@@ -1,9 +1,10 @@
-clickhouse-connect
+pandas
+numpy
 requests
 python-dotenv
-streamlit
-pandas
-praw
-vaderSentiment
-feedparser
-beautifulsoup4
+fredapi
+polygon-api-client
+newsapi-python
+textblob
+ccxt
+colorama

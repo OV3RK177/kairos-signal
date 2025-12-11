@@ -1,75 +1,104 @@
-import asyncio
-import websockets
+import os
+import time
 import json
 import clickhouse_connect
-from datetime import datetime, timezone
-import os
+from solana.rpc.api import Client
+from solders.pubkey import Pubkey
+from datetime import datetime
 from dotenv import load_dotenv
 
+# --- CONFIGURATION ---
 load_dotenv()
 CH_HOST = os.getenv('CLICKHOUSE_HOST', 'localhost')
-CH_PASS = os.getenv('CLICKHOUSE_PASSWORD', 'kairos') 
+CH_PASS = os.getenv('CLICKHOUSE_PASSWORD', 'kairos')
 
-# CLICKHOUSE CLIENT (The only DB fast enough for this)
-client = clickhouse_connect.get_client(host=CH_HOST, port=8123, username='default', password=CH_PASS)
+# --- TARGETS ---
+TARGETS = {
+    'HELIUM': 'hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux',
+    'HIVEMAPPER': '4vMsoUT2BWatFweudnQM1xedRLfJgJ7hswhcpz4xgBTy',
+    'RENDER': 'rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof',
+    'IO_NET': 'BZLbGTNnFdPrKh82qYCgtF2t3pG5U7F7j5C6x8k5token',
+    'SHDW': 'SHDWyBxihqiCj6YekG2GUr7wqKLeLAMK1gHZck9pL6y',
+    'MOBILE': 'mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6'
+}
 
-async def solana_stream():
-    uri = "wss://api.mainnet-beta.solana.com"
+# --- RPC POOL MANAGER ---
+class RPCPool:
+    def __init__(self):
+        self.endpoints = ["https://api.mainnet-beta.solana.com"]
+        try:
+            if os.path.exists('config/rpc_pool.json'):
+                with open('config/rpc_pool.json', 'r') as f:
+                    loaded = json.load(f)
+                    if loaded: self.endpoints = loaded
+        except Exception as e:
+            print(f"⚠️ Config Load Error: {e}")
+        self.current_index = 0
+
+    def get_client(self):
+        url = self.endpoints[self.current_index]
+        # print(f"🔌 RPC: {url}") 
+        return Client(url)
+
+    def rotate(self):
+        self.current_index = (self.current_index + 1) % len(self.endpoints)
+        print(f"🔄 Rotating RPC >> {self.endpoints[self.current_index]}")
+
+# --- DB CONNECTION ---
+def get_db():
+    return clickhouse_connect.get_client(host=CH_HOST, port=8123, username='default', password=CH_PASS)
+
+def init_db():
+    try:
+        client = get_db()
+        client.command("""
+        CREATE TABLE IF NOT EXISTS solana_firehose (
+            timestamp DateTime,
+            asset String,
+            signature String,
+            slot UInt64,
+            err String
+        ) ENGINE = MergeTree()
+        ORDER BY (asset, timestamp)
+        """)
+    except Exception as e:
+        print(f"CRITICAL DB ERROR: {e}")
+
+# --- MAIN LOOP ---
+def engage_firehose():
+    pool = RPCPool()
+    init_db()
+    client = get_db()
     
-    print(f"🔌 CONNECTING TO SOLANA WSS: {uri}")
+    print("🔥 SOLANA FIREHOSE: ENGAGED")
     
-    async with websockets.connect(uri) as websocket:
-        # Subscribe to "Slot" (New Block) updates - occurs every ~400ms
-        await websocket.send(json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "slotSubscribe"
-        }))
+    while True:
+        rpc = pool.get_client()
         
-        # Subscribe to "Vote" (Consensus) - MASSIVE VOLUME
-        # Warn: This is the true firehose.
-        await websocket.send(json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "voteSubscribe"
-        }))
-
-        print("🚀 FIREHOSE ACTIVE. STREAMING RAW DATA...")
-        
-        batch = []
-        last_flush = datetime.now()
-
-        while True:
+        for asset, mint in TARGETS.items():
             try:
-                msg = await websocket.recv()
-                data = json.loads(msg)
+                pubkey = Pubkey.from_string(mint)
+                # Gentle tap (limit 5) to avoid instant 429s
+                resp = rpc.get_signatures_for_address(pubkey, limit=5)
                 
-                if 'method' in data and data['method'] == 'slotNotification':
-                    # Extract Slot Info
-                    slot = data['params']['result']['slot']
-                    parent = data['params']['result']['parent']
-                    root = data['params']['result']['root']
-                    
-                    # 1. SLOT METRIC
-                    batch.append([datetime.now(), 'SOLANA_CHAIN', 'slot_height', float(slot)])
-                    
-                    # 2. VELOCITY METRIC (Slot Delta)
-                    batch.append([datetime.now(), 'SOLANA_CHAIN', 'slot_delta', float(slot - root)])
+                data = []
+                # Check if we got valid signatures
+                if resp.value:
+                    for sig in resp.value:
+                        row = [datetime.now(), asset, str(sig.signature), sig.slot, str(sig.err) if sig.err else "None"]
+                        data.append(row)
                 
-                elif 'method' in data and data['method'] == 'voteNotification':
-                     # Just counting raw votes as "Network Activity" proxy
-                     # We don't log every vote content (too big), just the TICK
-                     batch.append([datetime.now(), 'SOLANA_CHAIN', 'consensus_tick', 1.0])
-
-                # BATCH INSERT (To prevent crashing)
-                if len(batch) >= 5000:
-                    client.insert('metrics', batch, column_names=['timestamp', 'project_slug', 'metric_name', 'metric_value'])
-                    print(f"⚡ Flushed {len(batch)} raw data points to ClickHouse.")
-                    batch = []
-
+                if data:
+                    client.insert('solana_firehose', data, column_names=['timestamp', 'asset', 'signature', 'slot', 'err'])
+                    print(f"⚡ {asset}: Captured {len(data)} sigs")
+                
+                # Pace ourselves
+                time.sleep(2) 
+                
             except Exception as e:
-                print(f"Stream Error: {e}")
-                await asyncio.sleep(1)
+                print(f"🛑 Error on {asset}: {e}")
+                pool.rotate()
+                time.sleep(5)
 
 if __name__ == "__main__":
-    asyncio.run(solana_stream())
+    engage_firehose()

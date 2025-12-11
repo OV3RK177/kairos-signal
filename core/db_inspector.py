@@ -1,46 +1,49 @@
-import psycopg2
 import os
+import clickhouse_connect
 from dotenv import load_dotenv
 from tabulate import tabulate
 
 load_dotenv()
+CH_HOST = os.getenv('CLICKHOUSE_HOST', 'localhost')
+CH_PASS = os.getenv('CLICKHOUSE_PASSWORD', 'kairos')
 
-# CONFIRM CONNECTION
-PG_HOST = os.getenv('POSTGRES_HOST', 'localhost')
-PG_PASS = os.getenv('POSTGRES_PASSWORD', 'kairos') 
-
-def inspect():
+def inspect_schema_and_data():
     try:
-        conn = psycopg2.connect(host=PG_HOST, database="kairos_meta", user="doadmin", password=PG_PASS)
-        cur = conn.cursor()
-        
-        # 1. SEARCH FOR OUR TARGETS
-        targets = ['dimo', 'flux', 'myst', 'helium', 'render', 'grass']
-        print(f"\n🔍 SCANNING POSTGRES FOR: {', '.join(targets)}...")
-        
-        found = []
-        for t in targets:
-            # Case-insensitive search (%like%)
-            cur.execute(f"SELECT DISTINCT project FROM live_metrics WHERE project ILIKE '%{t}%'")
-            rows = cur.fetchall()
-            for r in rows:
-                found.append([t.upper(), r[0]])
+        client = clickhouse_connect.get_client(host=CH_HOST, port=8123, username='default', password=CH_PASS)
+        print(f"🔍 INSPECTING SCHEMA @ {CH_HOST}\n")
 
-        if found:
-            print(tabulate(found, headers=["Looking For", "Found In DB"], tablefmt="github"))
-        else:
-            print("❌ CRITICAL: No price data found for ANY target assets.")
-            
-        # 2. CHECK MOST RECENT ENTRIES (To see if data is stale)
-        print("\n⏱️ CHECKING FRESHNESS (Latest 5 Entries):")
-        cur.execute("SELECT time, project, value FROM live_metrics ORDER BY time DESC LIMIT 5")
-        recent = cur.fetchall()
-        print(tabulate(recent, headers=["Timestamp", "Project", "Price"], tablefmt="github"))
+        # 1. METRICS TABLE RECON
+        print("📋 SCHEMA: metrics")
+        try:
+            schema = client.query("DESCRIBE metrics")
+            print(tabulate(schema.result_rows, headers=["Column", "Type", "Default_Type", "Default_Expression", "Comment", "Codec_Expression", "TTL_Expression"], tablefmt="simple"))
+        except Exception as e:
+            print(f"⚠️ Schema Error: {e}")
 
-        conn.close()
+        print("\n" + "="*60 + "\n")
+
+        # 2. DATA PEEK (Blind Select)
+        print("🐝 LATEST SWARM DATA (SELECT * LIMIT 5)")
+        try:
+            # We use SELECT * to avoid guessing column names
+            data = client.query("SELECT * FROM metrics ORDER BY timestamp DESC LIMIT 5")
+            # We can't guarantee column order, but tabulate handles it
+            print(tabulate(data.result_rows, headers=data.column_names, tablefmt="psql"))
+        except Exception as e:
+            print(f"⚠️ Read Error: {e}")
+
+        print("\n" + "="*60 + "\n")
+
+        # 3. SOLANA RECHECK
+        print("🔥 LATEST SOLANA DATA")
+        try:
+            data = client.query("SELECT * FROM solana_firehose ORDER BY timestamp DESC LIMIT 5")
+            print(tabulate(data.result_rows, headers=data.column_names, tablefmt="psql"))
+        except Exception as e:
+             print(f"⚠️ Read Error: {e}")
 
     except Exception as e:
-        print(f"❌ DATABASE ERROR: {e}")
+        print(f"💥 CONNECTION ERROR: {e}")
 
 if __name__ == "__main__":
-    inspect()
+    inspect_schema_and_data()
