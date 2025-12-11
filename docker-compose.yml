@@ -7,7 +7,7 @@ services:
     command:
       - redpanda start
       - --smp 1
-      - --memory 1G
+      - --memory 2G
       - --reserve-memory 0M
       - --overprovisioned
       - --node-id 0
@@ -16,9 +16,7 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 2G
-        reservations:
-          memory: 512M
+          memory: 4G
     ports:
       - "9092:9092"
       - "9644:9644"
@@ -29,43 +27,47 @@ services:
     image: clickhouse/clickhouse-server
     container_name: clickhouse-server
     restart: always
-    deploy:
-      resources:
-        limits:
-          memory: 4G
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
     ports:
       - "8123:8123"
       - "9000:9000"
     volumes:
       - /mnt/volume_nyc3_01/clickhouse_data:/var/lib/clickhouse
-      # THE HAMMER: Force mount the password reset
       - ./reset_password.xml:/etc/clickhouse-server/users.d/reset_password.xml
 
-  postgres:
-    image: postgres:15
-    container_name: kairos_db
-    restart: on-failure
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASS:-kairos}
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-    ports:
-      - "5432:5432"
+  aggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kairos_aggregator
+    restart: always
+    # THIS ALLOWS THE CONTAINER TO TALK TO OLLAMA ON THE HOST
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python3", "-u", "core/free_data_aggregator.py"]
+    env_file: .env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./logs:/app/logs
+      - ./core:/app/core
+    depends_on:
+      - clickhouse
 
-  redis:
-    image: redis:alpine
-    container_name: kairos_redis
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kairos_dashboard
+    restart: always
     ports:
-      - "6379:6379"
-
-volumes:
-  postgres_data:
+      - "8501:8501"
+    command: ["streamlit", "run", "dashboard/mission_control.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    volumes:
+      - .:/app
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=kairos
+    depends_on:
+      - clickhouse

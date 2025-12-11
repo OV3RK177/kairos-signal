@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# KAIROS WAR LOG UTILITY
+LOG_FILE="war_log.md"
+TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S UTC")
+MESSAGE="$1"
+
+if [ -z "$MESSAGE" ]; then
+  echo "Usage: ./log \"Your message here\""
+  exit 1
+fi
+
+# Ensure the file exists
+if [ ! -f "$LOG_FILE" ]; then
+  echo "# KAIROS WAR LOG" > "$LOG_FILE"
+fi
+
+# Append the entry
+echo -e "\n### ⏱️ $TIMESTAMP" >> "$LOG_FILE"
+echo -e "* **Action:** $MESSAGE" >> "$LOG_FILE"
+
+echo "✅ Entry saved to $LOG_FILE"

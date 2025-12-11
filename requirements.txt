@@ -1,0 +1,9 @@
+clickhouse-connect
+requests
+python-dotenv
+streamlit
+pandas
+praw
+vaderSentiment
+feedparser
+beautifulsoup4

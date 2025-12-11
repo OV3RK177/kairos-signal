@@ -1,0 +1,6 @@
+ASSET,REAL_METRIC,REAL_Z,PRICE_Z,REALITY_GAP,STATUS
+POLYGON_NETWORK,gas_price_gwei,-0.36,-0.36,0.0,NEUTRAL
+HELIUM,onchain_supply,0.13,0.88,-0.75,NEUTRAL
+GRASS,onchain_supply,-1.49,0.06,-1.55,🫧 BUBBLE
+RENDER,onchain_supply,-1.68,0.43,-2.1,🫧 BUBBLE
+HELIUM_MOBILE,onchain_supply,-2.06,1.0,-3.06,🫧 BUBBLE

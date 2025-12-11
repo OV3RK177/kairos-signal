@@ -1,0 +1,53 @@
+/root/kairos-signal/core/neural_link.py:38: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  df = pd.read_sql(q, conn)
+... Compiling Digital Twin State ...
+... Transmitting to gemini-3-pro-preview ...
+
+>>> 🧠 GEMINI 3 INFERENCE <<<
+Based on the data streams provided, here is the divergence analysis between physical network fundamentals and market capital flows.
+
+### 1. DIVERGENCE ANALYSIS: PHYSICAL GROWTH VS. PRICE STAGNATION (UNDERVALUED)
+
+The strongest divergence exists where **Physical Nodes > Market Attention**.
+
+*   **PRIMARY SIGNAL: DIMO (`dimo`)**
+    *   **Physical Reality:** The network has a massive footprint of **155,711 connected vehicles**. Even with a small growth of **+0.032%** over 7 days, the sheer scale of active physical units dwarfs other networks.
+    *   **Market Reality:** DIMO is completely absent from the "Market Capital Flows" list. It does not appear among the high-volatility or high-cap assets (BTC/ETH derivatives).
+    *   **Conclusion:** The market is currently ignoring the fundamental utility of 155k real-world assets. Capital is rotating into BTC wrappers and speculative derivatives, leaving DIMO's utility value decoupled from its speculative premium. This indicates an **Undervalued** state.
+
+*   **SECONDARY SIGNAL: FLUX (`flux`)**
+    *   **Physical Reality:** 8,038 nodes with marginal growth (+0.09%).
+    *   **Market Reality:** Also absent from capital flow data.
+    *   **Conclusion:** Stagnant but stable. The lack of volatility indicates a lack of sell pressure, but also a lack of interest.
+
+### 2. PURELY SPECULATIVE ASSETS (ZERO FOOTPRINT / HIGH VOLATILITY)
+
+These assets demonstrate extreme capital velocity with no correlative physical infrastructure data provided.
+
+*   **`o-intelligence-coin`**:
+    *   **Volatility:** 1,460,238.0 (Extreme).
+    *   **Price:** ~14.4 Million.
+    *   **Assessment:** This asset represents pure synthetic speculation. The volatility is orders of magnitude higher than Bitcoin (~323) or Ether (~25). There is no physical backing listed; this is a capital trap or an extreme volatility play.
+
+*   **BTC/ETH Wrappers & Derivatives (`sbtc-2`, `clbtc`, `ignition-fbtc`)**:
+    *   **Volatility:** Range of 500–1400.
+    *   **Assessment:** These are financial engineering layers. While they derive value from the underlying POW/POS assets, the specific tokens listed are engaging in high-velocity arbitrage or yield farming (points trading) rather than physical infrastructure expansion.
+
+*   **`pleasing-gold` / `stackos`**:
+    *   **Assessment:** NaN values typically indicate illiquidity or broken pricing oracles. These are "Ghost Assets"—high risk, unquantifiable variance.
+
+### 3. TRADING BIAS: TOP 3 DePIN ASSETS
+
+Based strictly on the juxtaposition of physical health vs. capital flow:
+
+**ASSET 1: DIMO (dimo)**
+*   **BIAS: LONG (ACCUMULATION)**
+*   **Rationale:** "Deep Value." The asset has the highest tangible "proof of physical work" (155k vehicles) in the dataset but is ignored by the high-volatility capital rotation. When capital rotates out of BTC wrappers (`wrapped-bitcoin`, `tbtc`) looking for yield, it inevitably seeks fundamental growth. DIMO is the strongest candidate for this rotation.
+
+**ASSET 2: MYSTERIUM (mysterium)**
+*   **BIAS: SHORT / AVOID**
+*   **Rationale:** "Network Contraction." This is the only physical network showing negative growth (**-1.74%** active nodes). In a DePIN model, node churn is a leading indicator of price capitulation. If the physical utility is shrinking, the token value lacks support.
+
+**ASSET 3: BITTENSOR (bittensor)**
+*   **BIAS: NEUTRAL (RANGE BOUND)**
+*   **Rationale:** "Priced In." Bittensor is the *only* DePIN-adjacent asset that appears in the Market Capital Flows data (Price: ~$298, Volatility: ~2.48). It is seeing liquidity, but its volatility is low compared to the speculative assets. It is acting as an index for the sector—stable, but not currently exhibiting the growth asymmetry seen in DIMO or the danger seen in Mysterium.
