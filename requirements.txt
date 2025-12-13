@@ -8,3 +8,6 @@ newsapi-python
 textblob
 ccxt
 colorama
+clickhouse-connect
+streamlit
+plotly

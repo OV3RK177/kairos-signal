@@ -6,102 +6,62 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# --- CONFIG ---
-CH_HOST = 'clickhouse-server' 
-CH_PASS = os.getenv('CLICKHOUSE_PASSWORD', 'kairos')
-
-print("// KAIROS LEDGER // REAL-TIME ACCOUNTANT")
-
-def log(msg):
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+print("// KAIROS LEDGER V2 // PAPER TIGER MODE", flush=True)
 
 class KairosLedger:
     def __init__(self):
         self.host = 'clickhouse-server'
-        self.password = CH_PASS
+        self.password = 'kairos'
         self.client = None
+        self.balance = 10000.00  # STARTING CAPITAL
+        self.active_trades = []
 
     def connect(self):
         try:
             self.client = clickhouse_connect.get_client(host=self.host, port=8123, username='default', password=self.password)
+            # Create Ledger Table if not exists
             q = """
-            CREATE TABLE IF NOT EXISTS signal_ledger (
-                signal_time DateTime,
+            CREATE TABLE IF NOT EXISTS paper_ledger (
+                trade_id UUID DEFAULT generateUUIDv4(),
+                entry_time DateTime,
                 asset String,
-                action String,
+                side String,
+                size Float64,
                 entry_price Float64,
-                reason String,
-                status String DEFAULT 'OPEN',
                 exit_price Float64 DEFAULT 0,
-                pnl_pct Float64 DEFAULT 0,
-                closed_at DateTime DEFAULT toDateTime(0)
-            ) ENGINE = MergeTree() ORDER BY signal_time
+                pnl Float64 DEFAULT 0,
+                status String DEFAULT 'OPEN',
+                balance_after Float64 DEFAULT 0
+            ) ENGINE = MergeTree() ORDER BY entry_time
             """
             self.client.query(q)
-            log("✅ Ledger Database Ready.")
+            print(f"✅ Ledger Connected. Balance: ${self.balance:,.2f}", flush=True)
             return True
         except Exception as e:
-            log(f"❌ DB Error: {e}")
+            print(f"❌ Ledger DB Error: {e}", flush=True)
             return False
 
-    def check_performance(self):
-        # Find trades older than 4 hours that are still OPEN
-        q_open = "SELECT asset, entry_price, action, signal_time FROM signal_ledger WHERE status = 'OPEN' AND signal_time < now() - INTERVAL 4 HOUR"
-        try:
-            open_trades = self.client.query_df(q_open)
-        except: return
-
-        if open_trades.empty: return
-
-        log(f"🔍 Auditing {len(open_trades)} mature trades...")
-
-        for index, trade in open_trades.iterrows():
-            asset = trade['asset']
-            entry = trade['entry_price']
-            action = trade['action']
+    def execute_trade(self, signal):
+        # 1. Forex Filter
+        if "USD" in signal['asset'] and len(signal['asset']) == 6: # Crude forex check
+            return 
             
-            # Get Current Price
-            try:
-                q_price = f"SELECT argMax(metric_value, timestamp) as price FROM metrics WHERE project_slug = '{asset}' AND metric_name = 'price_usd'"
-                current_price = self.client.query(q_price).result_rows[0][0]
-                
-                if current_price == 0: continue # Data gap
-
-                # Calc PnL
-                if action == 'BUY':
-                    pnl = ((current_price - entry) / entry) * 100
-                else: # SELL
-                    pnl = ((entry - current_price) / entry) * 100
-                
-                # Close Trade
-                q_update = f"ALTER TABLE signal_ledger UPDATE status = 'CLOSED', exit_price = {current_price}, pnl_pct = {pnl}, closed_at = now() WHERE asset = '{asset}' AND status = 'OPEN'"
-                self.client.query(q_update)
-                
-                icon = "🟢" if pnl > 0 else "🔴"
-                log(f"{icon} CLOSED {asset}: {pnl:+.2f}%")
-                
-            except Exception as e:
-                log(f"⚠️ Audit failed for {asset}: {e}")
+        # 2. Position Sizing (Example: 10% of portfolio)
+        size = (self.balance * 0.10) / signal['price']
+        
+        # 3. Log Trade
+        q = f"""
+        INSERT INTO paper_ledger (entry_time, asset, side, size, entry_price, status)
+        VALUES (now(), '{signal['asset']}', '{signal['action']}', {size}, {signal['price']}, 'OPEN')
+        """
+        self.client.query(q)
+        print(f"💰 EXECUTED: {signal['action']} {signal['asset']} @ ${signal['price']}", flush=True)
 
     def run(self):
         while not self.connect(): time.sleep(5)
-        
+        # Main Loop would listen for Brain signals here
         while True:
-            try:
-                self.check_performance()
-                
-                # Stats
-                try:
-                    stats = self.client.query("SELECT count(), countIf(pnl_pct > 0) FROM signal_ledger WHERE status = 'CLOSED'").result_rows[0]
-                    total, wins = stats
-                    if total > 0:
-                        log(f"🏆 WIN RATE: {(wins/total)*100:.1f}% ({wins}/{total})")
-                except: pass
-                
-                time.sleep(60) 
-            except Exception as e:
-                log(f"❌ Ledger Loop Error: {e}"); self.connect(); time.sleep(10)
+            time.sleep(10) # Placeholder for heartbeat
 
 if __name__ == "__main__":
     KairosLedger().run()

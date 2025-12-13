@@ -4,45 +4,46 @@ import sys
 import time
 from dotenv import load_dotenv
 
-# FORCE LOAD ENV
 load_dotenv()
-
-def find_collectors():
-    collectors = []
-    for root, dirs, files in os.walk("collectors"):
-        for file in files:
-            if file.endswith(".py") and file != "__init__.py" and file != "base.py":
-                collectors.append(os.path.join(root, file))
-    return collectors
+COLLECTOR_DIR = "/root/kairos-signal/collectors"
 
 def ignite_swarm():
-    scripts = find_collectors()
-    if not scripts:
-        print("❌ NO COLLECTORS FOUND.")
+    print(f"🔥 KAIROS SWARM: INITIALIZING...")
+    
+    # 1. FIND THE MISSIONS
+    missions = []
+    for root, dirs, files in os.walk(COLLECTOR_DIR):
+        for file in files:
+            if file.endswith(".py") and file != "__init__.py" and file != "base.py":
+                path = os.path.join(root, file)
+                missions.append(path)
+    
+    if not missions:
+        print(f"❌ CRITICAL: No collectors found in {COLLECTOR_DIR}")
         return
 
-    print(f"🔥 IGNITING SWARM: {len(scripts)} Units detected.")
+    print(f"📋 MISSION MANIFEST: {len(missions)} Units Found.")
+    print(f"   - Batch 01 (Foundation): {sum('batch_01' in m for m in missions)} units")
+    print(f"   - Batch 10 (Physical):   {sum('batch_10' in m for m in missions)} units")
+    print(f"   - Batch 27 (Firehose):   {sum('batch_27' in m for m in missions)} units")
     
-    # Pass current environment to children
-    env = os.environ.copy()
+    # 2. LAUNCH THE SWARM
+    procs = []
+    for script in missions:
+        try:
+            # Run each collector in the background
+            p = subprocess.Popen(["/root/kairos-signal/venv/bin/python3", script])
+            procs.append(p)
+        except Exception as e:
+            print(f"   ⚠️ FAILED TO LAUNCH {os.path.basename(script)}: {e}")
+            
+    print(f"✅ SWARM ACTIVE. {len(procs)} Collectors Running.")
     
-    processes = []
     try:
-        for script in scripts:
-            # print(f"🚀 Launching {script}...")
-            p = subprocess.Popen([sys.executable, script], env=env)
-            processes.append(p)
-            time.sleep(0.1)
-            
-        print(f"✅ SWARM ACTIVE ({len(processes)} Threads).")
-        
-        while True:
-            time.sleep(1)
-            
+        while True: time.sleep(10)
     except KeyboardInterrupt:
-        print("\n🛑 KILLING SWARM...")
-        for p in processes:
-            p.terminate()
+        print("🛑 STOPPING SWARM...")
+        for p in procs: p.terminate()
 
 if __name__ == "__main__":
     ignite_swarm()

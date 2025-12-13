@@ -1,0 +1,7 @@
+clickhouse-connect==0.6.6
+confluent-kafka==2.3.0
+numpy==1.26.3
+scipy==1.11.4
+requests==2.31.0
+pandas==2.1.4
+python-dotenv==1.0.0

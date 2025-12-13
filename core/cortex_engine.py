@@ -1,146 +1,100 @@
-import clickhouse_connect
-import numpy as np
+import sys
+import os
 import time
-import re
+import logging
+import statistics
 
-# --- CONFIGURATION ---
-CH_HOST = "localhost"
-HISTORY_HOURS = 24  # Increased context for better sensor alignment
-MIN_HISTORY = 30    
-SENTIMENT_THRESHOLD = 0.05 # Neural Barrier (Median was 0.066)
+# 🔧 FORCE PATH FIX: Add parent directory to sys.path
+# This ensures we find 'kairos_config' even if run from a subprocess
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
-print(f"--- KAIROS CORTEX v15.0: SENSOR FUSION ACTIVE ---", flush=True)
-client = clickhouse_connect.get_client(host='localhost', port=8123, username='default', password='kairos')
+try:
+    import kairos_config as config
+except ImportError:
+    # Fallback prevents crash if config is temporarily locked
+    class config:
+        UPDATE_INTERVAL = 1
+        RISK_TOLERANCE = 0.02
+        MIN_LIQUIDITY = 5000
 
-# BLACKLIST (Ignore noise, but allow specific sensors)
-IGNORE_PATTERNS = [r"_price$", r"_vol$", r"_change$", r"^[a-z_]+$"]
+logger = logging.getLogger("KAIROS_CORTEX")
 
-def is_tradable(ticker):
-    for pattern in IGNORE_PATTERNS:
-        if re.search(pattern, ticker): return False
-    if len(ticker) > 8 and not ticker.isupper(): return False
-    return True
+# 🌍 CONTEXT ASSETS (Read-Only)
+# We use these to gauge network health and geopolitical stability
+INFRA_KEYWORDS = ["NODE", "VALIDATOR", "RPC", "INFRA", "STAKING", "LIDO", "ROCKET"]
+FOREX_KEYWORDS = ["FOREX", "EUR", "JPY", "GBP", "CHF", "AUD", "CAD", "NZD", "KRW"]
 
-def get_market_context():
-    """Fetches BOTH Asset Histories and Global Sensor States"""
-    try:
-        # 1. Fetch Asset Prices
-        query_assets = f"""
-        SELECT project_slug, groupArray(metric_value)
-        FROM (
-            SELECT project_slug, metric_value 
-            FROM metrics 
-            WHERE metric_name = 'price_usd' 
-            AND timestamp >= now() - INTERVAL {HISTORY_HOURS} HOUR
-            ORDER BY timestamp ASC
-        ) 
-        GROUP BY project_slug
-        """
-        asset_rows = client.query(query_assets).result_rows
-        
-        # 2. Fetch Global Sentiment (The "Vibe" Check)
-        query_sensor = """
-        SELECT argMax(metric_value, timestamp) 
-        FROM metrics 
-        WHERE metric_name = 'global_sentiment_score'
-        """
-        sensor_val = client.query(query_sensor).result_rows
-        current_sentiment = sensor_val[0][0] if sensor_val else 0.0
-        
-        # Filter & Package
-        assets = {}
-        for r in asset_rows:
-            if is_tradable(r[0]):
-                assets[r[0]] = np.array(r[1], dtype=np.float64)
-                
-        return assets, current_sentiment
-    except Exception as e:
-        print(f"⚠️ MEMORY FAILURE: {e}", flush=True)
-        return {}, 0.0
-
-def calculate_rsi(prices, period=14):
-    if len(prices) < period + 1: return 50.0
-    if np.std(prices) == 0: return 50.0
-    deltas = np.diff(prices)
-    seed = deltas[:period+1]
-    up = seed[seed >= 0].sum()/period
-    down = -seed[seed < 0].sum()/period
-    if down == 0: return 55.0
-    rs = up/down
-    return 100 - (100 / (1 + rs))
-
-def analyze_ticker(ticker, prices, sentiment):
-    if len(prices) < MIN_HISTORY: return None 
-
-    current_price = prices[-1]
-    lookback = min(len(prices), 200)
-    trend_line = np.mean(prices[-lookback:]) 
-    rsi = calculate_rsi(prices)
+def get_asset_type(ticker_name):
+    """
+    Classifies asset: 'TRADEABLE' or 'CONTEXT_ONLY'
+    """
+    if not ticker_name: return 'TRADEABLE' 
     
-    # --- LOGIC GATES (FUSION) ---
+    uname = ticker_name.upper()
+    
+    # 1. FOREX = CONTEXT ONLY (Geopolitical/Macro Trends)
+    for kw in FOREX_KEYWORDS:
+        if kw in uname: return 'CONTEXT_ONLY'
 
-    # SCENARIO A: UPTREND DIP (With Sentiment Confirmation)
-    if current_price > trend_line and rsi < 30:
-        # THE FUSION CHECK:
-        if sentiment > SENTIMENT_THRESHOLD:
-            return f"BUY {ticker} @ ${current_price:.2f} | 📈 TREND: UP | 🧠 SENTIMENT: {sentiment:.3f} (OK)"
-        else:
-            # We silently VETO the trade. 
-            # (Optional: return a log if you want to see blocked trades)
-            return None 
+    # 2. NODES = CONTEXT ONLY (Network Health)
+    for kw in INFRA_KEYWORDS:
+        if kw in uname: return 'CONTEXT_ONLY'
 
-    # SCENARIO B: DOWNTREND RALLY (Sell)
-    # We don't check sentiment for sells (Panic is panic)
-    if current_price < trend_line and rsi > 75:
-        return f"SELL {ticker} @ ${current_price:.2f} | 📉 TREND: DOWN | 📈 SPIKE: RSI {rsi:.1f}"
+    return 'TRADEABLE'
 
-    return None
-
-def scan_market():
-    print("🦁 SYSTEM ONLINE. Waiting for cycle...", flush=True)
+def run_cortex(shared_memory):
+    logger.info("🧠 CORTEX ONLINE. Forex & Nodes set to [READ-ONLY] for Context.")
+    
     while True:
-        # 1. LOAD CONTEXT
-        stock_swarm, global_sentiment = get_market_context()
-        print(f"🧠 CONTEXT: Global Sentiment = {global_sentiment:.4f}", flush=True)
-        
-        if global_sentiment < SENTIMENT_THRESHOLD:
-            print(f"🛡️  DEFENSE MODE: Sentiment low. Buying is restricted.", flush=True)
-        
-        signals = 0
-        analyzed = 0
-        
-        print(f"🌊 ANALYZING: Scanning {len(stock_swarm)} assets...", flush=True)
-        
-        # 2. SCAN ASSETS
-        for ticker, history in stock_swarm.items():
-            analyzed += 1
-            try:
-                sig = analyze_ticker(ticker, history, global_sentiment)
-                if sig:
-                    print(f"🚨 SIGNAL: {sig}", flush=True)
-
-                # --- AUTO EXECUTION (GLOBAL LEDGER) ---
-                parts = sig.split('|')
-                side_asset = parts[0].strip().split(' ') # ['BUY', 'BTC_USD']
-                price_str = parts[0].split('@ $')[1] # '95000.00'
-                
-                side = side_asset[0]
-                asset = side_asset[1]
-                price = float(price_str)
-                
-                try:
-                    client.command(f"INSERT INTO signal_ledger (timestamp, asset, signal_type, signal_price, entry_price, status) VALUES (now(), '{asset}', '{side}', {price}, {price}, 'OPEN')")
-                    print(f"⚔️  ORDER SENT: {asset} to Ledger.", flush=True)
-                except Exception as e:
-                    print(f"❌ ORDER FAILED: {e}")
-                # --------------------------------------
-                    signals += 1
-            except:
+        try:
+            # 1. READ SNAPSHOT
+            market_data = dict(shared_memory)
+            if not market_data:
+                time.sleep(1)
                 continue
-                
-        print(f"✅ CYCLE COMPLETE. Scanned {analyzed} assets. Signals: {signals}")
-        print("⏳ Waiting 30s...", flush=True)
-        time.sleep(30)
+            
+            # 2. CALCULATE MACRO CONTEXT
+            # We use ALL valid prices (Tradeable + Forex + Nodes) to feel the pulse
+            valid_items = [v for v in market_data.values() if v.get('valid')]
+            prices = [d['price'] for d in valid_items]
+            
+            if not prices: continue
 
-if __name__ == "__main__":
-    scan_market()
+            # Macro Sentiment (Simple Average for now)
+            # In V3, we can split this: Forex Volatility vs Crypto Volatility
+            global_avg = statistics.mean(prices)
+            
+            signals = 0
+            
+            # 3. GENERATE SIGNALS (Selective)
+            for token, data in market_data.items():
+                price = data.get('price')
+                vwap = data.get('vwap')
+                
+                # Mock Ticker Name (In Prod: db.get_name(token))
+                ticker_name = "SOL_TOKEN" 
+
+                asset_class = get_asset_type(ticker_name)
+
+                # 🛡️ CONTEXT ONLY FILTER
+                # We monitored them for global_avg above, but we SKIP trading logic here.
+                if asset_class == 'CONTEXT_ONLY':
+                    # logger.debug(f"🔍 Analyzing Context: {ticker_name}")
+                    continue
+
+                # ✅ TRADING LOGIC (Pure Assets Only)
+                if vwap and vwap > 0:
+                    deviation = (price - vwap) / vwap
+                    
+                    if abs(deviation) > config.RISK_TOLERANCE:
+                        if price > config.MIN_LIQUIDITY:
+                            # signals += 1
+                            pass
+
+            time.sleep(config.UPDATE_INTERVAL)
+
+        except Exception as e:
+            logger.error(f"❌ Cortex Error: {e}")
+            time.sleep(1)

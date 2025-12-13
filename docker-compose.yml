@@ -1,9 +1,9 @@
 version: '3.8'
 services:
-  redpanda:
+  kairos_redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     container_name: kairos_redpanda
-    restart: always
+    restart: unless-stopped
     command:
       - redpanda start
       - --smp 1
@@ -12,62 +12,49 @@ services:
       - --overprovisioned
       - --node-id 0
       - --check=false
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 4G
+      - --kafka-addr=0.0.0.0:9092
+      - --advertise-kafka-addr=kairos_redpanda:9092
     ports:
       - "9092:9092"
-      - "9644:9644"
     volumes:
       - /mnt/volume_nyc3_01/redpanda_data:/var/lib/redpanda/data
 
-  clickhouse:
-    image: clickhouse/clickhouse-server
+  clickhouse-server:
+    image: clickhouse/clickhouse-server:latest
     container_name: clickhouse-server
-    restart: always
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
+    restart: unless-stopped
     ports:
       - "8123:8123"
       - "9000:9000"
     volumes:
       - /mnt/volume_nyc3_01/clickhouse_data:/var/lib/clickhouse
       - ./reset_password.xml:/etc/clickhouse-server/users.d/reset_password.xml
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 
-  aggregator:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  kairos_aggregator:
+    build: 
+      context: ./aggregator
     container_name: kairos_aggregator
-    restart: always
-    # THIS ALLOWS THE CONTAINER TO TALK TO OLLAMA ON THE HOST
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["python3", "-u", "core/free_data_aggregator.py"]
-    env_file: .env
-    volumes:
-      - ./logs:/app/logs
-      - ./core:/app/core
+    restart: unless-stopped
     depends_on:
-      - clickhouse
-
-  dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: kairos_dashboard
-    restart: always
-    ports:
-      - "8501:8501"
-    command: ["streamlit", "run", "dashboard/mission_control.py", "--server.port=8501", "--server.address=0.0.0.0"]
-    volumes:
-      - .:/app
+      - kairos_redpanda
+      - clickhouse-server
     environment:
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=kairos
+      - CH_HOST=clickhouse-server
+      - CH_PASS=kairos
+      - KAFKA_BROKER=kairos_redpanda:9092
+
+  kairos_dashboard:
+    image: grafana/grafana:latest
+    container_name: kairos_dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+      - GF_SECURITY_ADMIN_PASSWORD=kairos
     depends_on:
-      - clickhouse
+      - clickhouse-server
